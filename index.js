@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const jwt = require("jsonwebtoken");
+const cokkieParser = require("cookie-parser");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
@@ -12,7 +14,7 @@ app.use(
   })
 );
 app.use(express.json());
-
+app.use(cokkieParser());
 const uri = process.env.MONGO_URI;
 const client = new MongoClient(uri, {
   serverApi: {
@@ -26,8 +28,44 @@ async function run() {
   const assignmentCollections = client
     .db("assignmentList")
     .collection("assignment");
+  const verifyToken = async (req, res, next) => {
+    const token = req.cookies?.token;
+    if (!token) {
+      return res
+        .status(401)
+        .json({ message: "No token, authorization denied" });
+    }
+    jwt.verify(token, "secret", (err, decoded) => {
+      if (err) {
+        return res.status(401).json({ message: "Token is not valid" });
+      }
+
+      req.user = decoded;
+
+      next();
+    });
+  };
   try {
     client.connect();
+    // create token
+    app.post("/create/token", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, "secret");
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "none",
+        })
+        .status(200)
+        .json({ token, user });
+    });
+    app.post("/logout", async (req, res) => {
+      const token = req.cookies.token;
+      console.log(token);
+      res.clearCookie("token");
+    });
+    // create
     app.post("/create/assignment", async (req, res) => {
       try {
         const assignment = req.body;
@@ -38,9 +76,83 @@ async function run() {
         res.send(error);
       }
     });
+    //
+    app.get("/get/assignment", async (req, res) => {
+      const result = await assignmentCollections.find().toArray();
+      res.send(result);
+    });
+    // single assignmentLoad
+    app.get("/get/assignment/:id", async (req, res) => {
+      const result = await assignmentCollections.findOne({
+        _id: new ObjectId(req.params.id),
+      });
+      res.send(result);
+    });
+    // delete assignment
+    app.delete("/delete/assignment/:id", verifyToken, async (req, res) => {
+      const deletedAssignment = await assignmentCollections.findOne({
+        _id: new ObjectId(req.params.id),
+      });
+      if (!deletedAssignment) {
+        return res.status(404).send({ error: "Assignment not found" });
+      }
+      if (deletedAssignment.owner !== req.user.email) {
+        return res.status(401).send({ error: "Unauthorized" });
+      }
+      const result = await assignmentCollections.deleteOne({
+        _id: new ObjectId(req.params.id),
+      });
+      res.status(200).json({
+        message: "Assignment deleted successfully",
+        success: true,
+        result,
+      });
+    });
+    app.patch("/edit/assignment/:id", verifyToken, async (req, res) => {
+      const assignmentExist = await assignmentCollections.findOne({
+        _id: new ObjectId(req.params.id),
+      });
+      if (!assignmentExist) {
+        return res.status(404).send({ error: "Assignment not found" });
+      }
+      if (assignmentExist.owner !== req.user.email) {
+        return res.status(401).send({ error: "Unauthorized" });
+      }
+      const options = { upsert: true };
+      const question = req.body;
+      const updatedDoc = {
+        $set: {
+          title: question.title,
+          date: question.date,
+          description: question.description,
+          level: question.level,
+          image: question.image,
+          marks: question.marks,
+        },
+      };
+      const result = await assignmentCollections.updateOne(
+        { _id: new ObjectId(req.params.id) },
+        updatedDoc,
+        options
+      );
+      console.log(result);
+      res.status(200).json({
+        message: "Assignment updated successfully",
+        success: true,
+        result,
+        question,
+      });
+    });
+    // edit assignment
+    // app.get("/get/assignments/:level", async (req, res) => {
+    //   const query = { _id: new ObjectId(req.params.level) };
+    //   console.log(query);
+
+    //   const result = await assignmentCollections.find(query).toArray();
+    //   res.send(result);
+    // });
   } finally {
     // Ensures that the client will close when you finish/error
-    await client.close();
   }
 }
 app.get("/", (req, res) => res.send("Hello World!"));
