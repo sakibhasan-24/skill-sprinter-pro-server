@@ -28,6 +28,9 @@ async function run() {
   const assignmentCollections = client
     .db("assignmentList")
     .collection("assignment");
+  const submitAssignment = client
+    .db("submitAssignmentList")
+    .collection("submitAssignment");
   const verifyToken = async (req, res, next) => {
     const token = req.cookies?.token;
     if (!token) {
@@ -143,14 +146,30 @@ async function run() {
         question,
       });
     });
-    // edit assignment
-    // app.get("/get/assignments/:level", async (req, res) => {
-    //   const query = { _id: new ObjectId(req.params.level) };
-    //   console.log(query);
+    //   create submit assignment
+    app.post("/submit/assignment", verifyToken, async (req, res) => {
+      //   console.log(req.params.id);
 
-    //   const result = await assignmentCollections.find(query).toArray();
-    //   res.send(result);
-    // });
+      const data = req.body;
+      console.log(data);
+      const existingAssignment = await assignmentCollections.findOne({
+        _id: new ObjectId(data._id),
+      });
+      console.log(existingAssignment.owner, req.user.email);
+      if (existingAssignment.owner !== req.user.email) {
+        console.log("you can submit ");
+        console.log(data);
+        const result = await assignmentCollections.insertOne(data);
+        res.status(201).json({
+          message: "Assignment submitted successfully",
+          result,
+          data,
+          success: true,
+        });
+      } else {
+        res.status(200).json("you can not submit your own assignment");
+      }
+    });
   } finally {
     // Ensures that the client will close when you finish/error
   }
