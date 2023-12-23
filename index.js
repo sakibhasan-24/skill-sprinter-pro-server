@@ -153,13 +153,13 @@ async function run() {
       const data = req.body;
       console.log(data);
       const existingAssignment = await assignmentCollections.findOne({
-        _id: new ObjectId(data._id),
+        _id: new ObjectId(data.id),
       });
       console.log(existingAssignment.owner, req.user.email);
       if (existingAssignment.owner !== req.user.email) {
         console.log("you can submit ");
         console.log(data);
-        const result = await assignmentCollections.insertOne(data);
+        const result = await submitAssignment.insertOne(data);
         res.status(201).json({
           message: "Assignment submitted successfully",
           result,
@@ -169,6 +169,58 @@ async function run() {
       } else {
         res.status(200).json("you can not submit your own assignment");
       }
+    });
+    // get submitted assignment
+    app.get("/submitted/assignments", verifyToken, async (req, res) => {
+      const query = {};
+      const result = await submitAssignment.find(query).toArray();
+
+      res
+        .status(200)
+        .json({ message: "submitted assignment", result, success: true });
+    });
+    // get submitted assignment on assignment id
+    app.get("/assignment/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await assignmentCollections.findOne({
+        _id: new ObjectId(id),
+      });
+      res
+        .status(200)
+        .json({ message: "assignment details", result, success: true });
+    });
+    // get pending  submitted assignment
+    app.get("/pending/submitted/assignments", async (req, res) => {
+      const result = await submitAssignment
+        .find({ status: "pending" })
+        .toArray();
+      res.status(200).json({
+        message: "submitted assignment pending",
+        result,
+        success: true,
+      });
+    });
+    app.patch("/update/assignment/:id", async (req, res) => {
+      const id = req.params.id;
+      const existingState = await submitAssignment.findOne({
+        _id: new ObjectId(id),
+      });
+      console.log(existingState);
+      const data = req.body;
+      console.log(data);
+      const options = { upsert: true };
+      const updatedDoc = {
+        $set: {
+          status: data.status,
+          updatedAt: new Date(),
+        },
+      };
+      const result = await submitAssignment.updateOne(
+        { _id: new ObjectId(req.params.id) },
+        updatedDoc,
+        options
+      );
+      res.send({ message: "assignment updated", result, success: true });
     });
   } finally {
     // Ensures that the client will close when you finish/error
