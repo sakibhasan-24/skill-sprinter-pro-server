@@ -38,6 +38,7 @@ async function run() {
     .db("submitAssignmentMarks")
     .collection("submitAssignmentMarks");
   const services = client.db("services").collection("service");
+
   const verifyToken = async (req, res, next) => {
     const token = req.cookies?.token;
     if (!token) {
