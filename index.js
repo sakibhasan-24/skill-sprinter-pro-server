@@ -9,7 +9,11 @@ const port = process.env.PORT || 5000;
 
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: [
+      "http://localhost:5173",
+      "https://skill-sprinter-pro.firebaseapp.com",
+      "https://skill-sprinter-pro.web.app/",
+    ],
     credentials: true,
   })
 );
@@ -140,7 +144,12 @@ async function run() {
         return res.status(404).send({ error: "Assignment not found" });
       }
       if (assignmentExist.owner !== req.user.email) {
-        return res.status(401).send({ error: "Unauthorized" });
+        const user = {
+          em: assignmentExist.owner,
+          k: req.user.email,
+        };
+        console.log(assignmentExist.owner, req.user.email);
+        return res.status(401).send({ error: "Unauthorized", user });
       }
       const options = { upsert: true };
       const question = req.body;
