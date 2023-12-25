@@ -31,6 +31,13 @@ async function run() {
   const submitAssignment = client
     .db("submitAssignmentList")
     .collection("submitAssignment");
+  const userSubmittedAssignment = client
+    .db("userSubmittedAssignment")
+    .collection("userSubmittedAssignment");
+  const submitAssignmentMarks = client
+    .db("submitAssignmentMarks")
+    .collection("submitAssignmentMarks");
+  const services = client.db("services").collection("service");
   const verifyToken = async (req, res, next) => {
     const token = req.cookies?.token;
     if (!token) {
@@ -80,8 +87,21 @@ async function run() {
       }
     });
     //
-    app.get("/get/assignment", async (req, res) => {
-      const result = await assignmentCollections.find().toArray();
+    app.get("/get/assignments", async (req, res) => {
+      let query = {};
+      const size = parseInt(req.query.size);
+      const page = parseInt(req.query.page);
+      //   console.log(size, page);
+      //   console.log("s", page * size);
+      const { category } = req.query;
+      if (category) {
+        query.category = category;
+      }
+      const result = await assignmentCollections
+        .find(query)
+        .skip(page * size)
+        .limit(size)
+        .toArray();
       res.send(result);
     });
     // single assignmentLoad
@@ -182,6 +202,7 @@ async function run() {
     // get submitted assignment on assignment id
     app.get("/assignment/:id", async (req, res) => {
       const id = req.params.id;
+      //   console.log(id);
       const result = await assignmentCollections.findOne({
         _id: new ObjectId(id),
       });
@@ -200,12 +221,64 @@ async function run() {
         success: true,
       });
     });
-    app.patch("/update/assignment/:id", async (req, res) => {
+    app.post("/update/assignment/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const existingState = await submitAssignment.findOne({
         _id: new ObjectId(id),
       });
-      console.log(existingState);
+      if (existingState.email === req.user.email) {
+        return res.status(200).json({
+          message: "you can't marks your own assignment",
+          success: false,
+        });
+      }
+      const data = req.body;
+      const result = await submitAssignmentMarks.insertOne(data);
+      res.send({
+        message: "assignment updated",
+        data,
+        existingState,
+        result,
+        success: true,
+      });
+    });
+    app.post("/marks", verifyToken, async (req, res) => {
+      const data = req.body;
+      console.log("marksMan", req.user.email);
+      const result = await userSubmittedAssignment.insertOne(data);
+      console.log("res", result);
+      res.send({ result, data });
+    });
+
+    app.get("/user/submitted/assignments", async (req, res) => {
+      const size = parseInt(req.query.size);
+      const page = parseInt(req.query.page);
+
+      let query = {};
+      console.log("req.query", req.query.email);
+      if (req.query.email) {
+        query = { email: req.query.email };
+      }
+      const data = await submitAssignment
+        .find(query)
+        .skip(page * size)
+        .limit(size)
+        .toArray();
+      // /console.log("data", data);
+      res.send(data);
+    });
+    app.get("/services", async (req, res) => {
+      const result = await services.find().toArray();
+      res.send(result);
+    });
+
+    app.patch("/update/user/result/:id", verifyToken, async (req, res) => {
+      const instructorEmail = req.user.email;
+      console.log(instructorEmail);
+      const id = req.params.id;
+      const existingState = await submitAssignment.findOne({
+        _id: new ObjectId(id),
+      });
       const data = req.body;
       console.log(data);
       const options = { upsert: true };
@@ -215,6 +288,7 @@ async function run() {
           updatedAt: new Date(),
         },
       };
+      console.log(updatedDoc, data);
       const result = await submitAssignment.updateOne(
         { _id: new ObjectId(req.params.id) },
         updatedDoc,
