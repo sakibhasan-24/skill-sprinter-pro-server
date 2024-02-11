@@ -42,6 +42,7 @@ async function run() {
     .db("submitAssignmentMarks")
     .collection("submitAssignmentMarks");
   const services = client.db("services").collection("service");
+  const reviewCollection = client.db("reviews").collection("review");
 
   const verifyToken = async (req, res, next) => {
     const token = req.cookies?.token;
@@ -304,7 +305,34 @@ async function run() {
         updatedDoc,
         options
       );
+
       res.send({ message: "assignment updated", result, success: true });
+    });
+    // create review api
+    app.post("/reviews", async (req, res) => {
+      const result = req.body;
+
+      const existingReview = await reviewCollection.findOne({
+        email: result.email,
+      });
+      if (existingReview) {
+        return res.send({
+          message: "You have already submitted a review",
+          success: false,
+        });
+      }
+      const review = await reviewCollection.insertOne(result);
+      console.log(result);
+      res.send({
+        message: "Review submitted successfully",
+        review,
+        success: true,
+        result,
+      });
+    });
+    app.get("/reviews", async (req, res) => {
+      const result = await reviewCollection.find({}).toArray();
+      res.send(result);
     });
   } finally {
     // Ensures that the client will close when you finish/error
